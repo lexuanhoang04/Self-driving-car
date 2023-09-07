@@ -34,7 +34,7 @@ def calculate_control_signal(left_point, right_point, im_center):
     # Calculate steering angle from center point difference
     steering = -float(center_diff * (0.0025 / 2))
     steering = min(1, max(-1, steering))
-    throttle = 0.88
+    throttle = 0.83
 
     # From steering, calculate left/right motor speed
     left_motor_speed = 0
@@ -49,6 +49,34 @@ def calculate_control_signal(left_point, right_point, im_center):
 
     left_motor_speed = int(left_motor_speed * 100)
     right_motor_speed = int(right_motor_speed * 100)
+    if abs(left_motor_speed - right_motor_speed) <= 5:
+        right_motor_speed = 83
+        left_motor_speed = 83
+    elif 5 < left_motor_speed - right_motor_speed <= 10:
+        right_motor_speed = 83
+        left_motor_speed = 85
+    elif 5 < right_motor_speed - left_motor_speed <= 10:
+        right_motor_speed = 85
+        left_motor_speed = 83
+    elif 10 < left_motor_speed - right_motor_speed <= 20:
+        right_motor_speed = 83
+        left_motor_speed = 86
+    elif 10 < right_motor_speed - left_motor_speed <= 20:
+        right_motor_speed = 86
+        left_motor_speed = 83
+    elif 20 < left_motor_speed - right_motor_speed <= 30:
+        right_motor_speed = 83
+        left_motor_speed = 87
+    elif 20 < right_motor_speed - left_motor_speed <= 30:
+        right_motor_speed = 87
+        left_motor_speed = 83
+    elif 30 < left_motor_speed - right_motor_speed <= 40:
+        right_motor_speed = 83
+        left_motor_speed = 88
+    elif 30 < right_motor_speed - left_motor_speed <= 40:
+        right_motor_speed = 88
+        left_motor_speed = 83
+
 
     return left_motor_speed, right_motor_speed
 
@@ -70,13 +98,13 @@ def gaussian_blur(img, kernel_size):
 
 def birdview_transform(img):
     """Get birdview image"""
-    IMAGE_H = 160
-    IMAGE_W = 320
+    IMAGE_H = 296
+    IMAGE_W = 400
 
-    src = np.float32([[0, IMAGE_H], [320, IMAGE_H], [
+    src = np.float32([[0, IMAGE_H], [IMAGE_W, IMAGE_H], [
         0, IMAGE_H // 3], [IMAGE_W, IMAGE_H // 3]])
-    dst = np.float32([[90, IMAGE_H], [230, IMAGE_H],
-                      [-10, 0], [IMAGE_W + 10, 0]])
+    dst = np.float32([[110, IMAGE_H], [290, IMAGE_H],
+                      [-20, 0], [IMAGE_W, 0]])
     M = cv2.getPerspectiveTransform(src, dst)  # The transformation matrix
     warped_img = cv2.warpPerspective(
         img, M, (IMAGE_W, IMAGE_H))  # Image warping
@@ -108,19 +136,23 @@ def find_lane_lines(image, draw=False):
 
     # Interested line to determine lane center
     interested_line_y = int(im_height * 0.7)
+    interested_line_y_up = int(im_height * 0.5)
     if draw:
         cv2.line(viz_img, (0, interested_line_y),
                  (im_width, interested_line_y), (0, 0, 255), 2)
+        cv2.line(viz_img, (0, interested_line_y_up),
+                 (im_width, interested_line_y_up), (0, 0, 255), 2)
     interested_line = image[interested_line_y, :]
+    interested_line_up = image[interested_line_y_up, :]
 
     # Determine left point and right point
     left_point = -1
     right_point = -1
-    lane_width = 100
-
-    gap_right = 0
-
-
+    left_point_up = -1
+    right_point_up = -1
+    lane_width = 212
+    right_points_before = [-1, -1, -1, -1, -1]
+    right_points_up_before = [-1, -1, -1, -1, -1]
     center = (im_width // 2) + 25
 
     for x in range(center, 0, -1):
@@ -128,16 +160,35 @@ def find_lane_lines(image, draw=False):
             left_point = x
             break
     for x in range(center + 1, im_width):
-        right_point_before = right_point
+
+        right_points_before.append(right_point)
+        right_points_before.pop(0)
         if interested_line[x] > 0:
             right_point = x
             break
 
-    if right_point_before != -1:
-        gap_right = abs(right_point - right_point_before)
-        if gap_right > 50:
-            right_point = right_point_before
+    for x in range(center, 0, -1):
+        if interested_line_up[x] > 0:
+            left_point_up = x
+            break
+    for x in range(center + 1, im_width):
 
+        right_points_up_before.append(right_point_up)
+        right_points_up_before.pop(0)
+        if interested_line_up[x] > 0:
+            right_point_up = x
+            break
+
+    if right_points_before[4] != -1:
+        gap_right = abs(right_point - right_points_before[4])
+        if gap_right > 50:
+            right_point = sum(right_points_before) // 5
+
+
+    if right_points_up_before[4] != -1:
+        gap_right_up = abs(right_point_up - right_points_up_before[4])
+        if gap_right_up > 50:
+            right_point_up = sum(right_points_up_before) // 5
 
     # Predict occluded points
     if left_point != -1 and right_point == -1:
@@ -145,9 +196,20 @@ def find_lane_lines(image, draw=False):
     if left_point == -1 and right_point != -1:
         left_point = right_point - lane_width
 
+    if left_point_up != -1 and right_point_up == -1:
+        right_point_up = left_point_up + lane_width
+    if left_point_up == -1 and right_point_up != -1:
+        left_point_up = right_point_up - lane_width
+
     if abs(left_point - right_point) < 50:
-        right_point = right_point_before
+        right_point = sum(right_points_before) // 5
         left_point = right_point - lane_width
+
+    if abs(left_point_up - right_point_up) < 50:
+        right_point_up = sum(right_points_up_before) // 5
+        left_point_up = right_point_up - lane_width
+
+
 
     if draw:
         if left_point != -1:
@@ -156,8 +218,14 @@ def find_lane_lines(image, draw=False):
         if right_point != -1:
             viz_img = cv2.circle(
                 viz_img, (right_point, interested_line_y), 7, (0, 255, 0), -1)
+        if left_point_up != -1:
+            viz_img = cv2.circle(
+                viz_img, (left_point_up, interested_line_y_up), 7, (255, 255, 0), -1)
+        if right_point_up != -1:
+            viz_img = cv2.circle(
+                viz_img, (right_point_up, interested_line_y_up), 7, (0, 255, 0), -1)
 
     if draw:
-        return left_point, right_point, center, viz_img
+        return left_point, right_point, center, left_point_up, right_point_up, viz_img
     else:
-        return left_point, right_point, center
+        return left_point, right_point, center, left_point_up, right_point_up
