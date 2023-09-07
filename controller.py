@@ -6,10 +6,12 @@ from config import CONTROL_IP, CONTROL_PORT
 sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, 0)
 sk.settimeout(3000)
 
+
 def set_control_ip():
     ip = socket.gethostbyname(socket.gethostname())
     control_msg = "SET_CONTROL_IP {}".format(ip).encode('ascii')
     sk.sendto(control_msg, (CONTROL_IP, CONTROL_PORT))
+
 
 def send_control(left_motor_speed, right_motor_speed):
     """Convert steering and throttle signals to a suitable format and send them to ESP32 bot"""
@@ -20,17 +22,17 @@ def send_control(left_motor_speed, right_motor_speed):
 
 def calculate_control_signal(left_point, right_point, im_center):
     """Calculate control signal"""
-    
-    if left_point == -1 or right_point == -1:
+
+    '''if left_point == -1 or right_point == -1:
         left_motor_speed = right_motor_speed = 100
-        return left_motor_speed, right_motor_speed
+        return left_motor_speed, right_motor_speed'''
 
     # Calculate difference between car center point and image center point
     center_point = (right_point + left_point) // 2
     center_diff = center_point - im_center
 
     # Calculate steering angle from center point difference
-    steering = -float(center_diff * (0.0025/2))
+    steering = -float(center_diff * (0.0025 / 2))
     steering = min(1, max(-1, steering))
     throttle = 0.88
 
@@ -47,9 +49,8 @@ def calculate_control_signal(left_point, right_point, im_center):
 
     left_motor_speed = int(left_motor_speed * 100)
     right_motor_speed = int(right_motor_speed * 100)
-    
-    return left_motor_speed, right_motor_speed
 
+    return left_motor_speed, right_motor_speed
 
 
 def grayscale(img):
@@ -73,9 +74,9 @@ def birdview_transform(img):
     IMAGE_W = 320
 
     src = np.float32([[0, IMAGE_H], [320, IMAGE_H], [
-                     0, IMAGE_H//3], [IMAGE_W, IMAGE_H//3]])
+        0, IMAGE_H // 3], [IMAGE_W, IMAGE_H // 3]])
     dst = np.float32([[90, IMAGE_H], [230, IMAGE_H],
-                      [-10, 0], [IMAGE_W+10, 0]])
+                      [-10, 0], [IMAGE_W + 10, 0]])
     M = cv2.getPerspectiveTransform(src, dst)  # The transformation matrix
     warped_img = cv2.warpPerspective(
         img, M, (IMAGE_W, IMAGE_H))  # Image warping
@@ -89,7 +90,7 @@ def preprocess(img):
     img = gaussian_blur(img, 3)
     img = canny(img, 100, 200)
     cv2.imshow("Canny", img)
-    cv2.waitKey(1)
+    cv2.waitKey(2)
     img = birdview_transform(img)
 
     return img
@@ -117,20 +118,35 @@ def find_lane_lines(image, draw=False):
     right_point = -1
     lane_width = 100
 
+    gap_right = 0
+
+
     center = (im_width // 2) + 25
+
     for x in range(center, 0, -1):
         if interested_line[x] > 0:
             left_point = x
             break
     for x in range(center + 1, im_width):
+        right_point_before = right_point
         if interested_line[x] > 0:
             right_point = x
             break
+
+    if right_point_before != -1:
+        gap_right = abs(right_point - right_point_before)
+        if gap_right > 50:
+            right_point = right_point_before
+
 
     # Predict occluded points
     if left_point != -1 and right_point == -1:
         right_point = left_point + lane_width
     if left_point == -1 and right_point != -1:
+        left_point = right_point - lane_width
+
+    if abs(left_point - right_point) < 50:
+        right_point = right_point_before
         left_point = right_point - lane_width
 
     if draw:
