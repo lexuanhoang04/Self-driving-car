@@ -31,16 +31,14 @@ def calculate_control_signal(left_point, right_point, im_center):
     center_point = (right_point + left_point) // 2
     center_diff = center_point - im_center
 
-
     # Calculate steering angle from center point difference
-    steering = -float(center_diff * 0.0025)
+    steering = -float(center_diff * 0.003)
     steering = min(1, max(-1, steering))
     throttle = 0.84
 
     # From steering, calculate left/right motor speed
     left_motor_speed = 0
     right_motor_speed = 0
-
 
     if steering > 0:
         left_motor_speed = throttle * (1 - steering)
@@ -51,34 +49,33 @@ def calculate_control_signal(left_point, right_point, im_center):
 
     left_motor_speed = int(left_motor_speed * 100)
     right_motor_speed = int(right_motor_speed * 100)
-    if abs(left_motor_speed - right_motor_speed) <= 5:
+    """if abs(left_motor_speed - right_motor_speed) <= 5:
         right_motor_speed = 83
         left_motor_speed = 83
     elif 5 < left_motor_speed - right_motor_speed <= 10:
         right_motor_speed = 83
         left_motor_speed = 86
     elif 5 < right_motor_speed - left_motor_speed <= 10:
-        right_motor_speed = 86
+        right_motor_speed = 85
         left_motor_speed = 83
     elif 10 < left_motor_speed - right_motor_speed <= 20:
-        right_motor_speed = 83
-        left_motor_speed = 87
+        right_motor_speed = 80
+        left_motor_speed = 94
     elif 10 < right_motor_speed - left_motor_speed <= 20:
-        right_motor_speed = 87
+        right_motor_speed = 86
         left_motor_speed = 83
     elif 20 < left_motor_speed - right_motor_speed <= 30:
-        right_motor_speed = 83
-        left_motor_speed = 88
+        right_motor_speed = 80
+        left_motor_speed = 98
     elif 20 < right_motor_speed - left_motor_speed <= 30:
-        right_motor_speed = 88
+        right_motor_speed = 87
         left_motor_speed = 83
     elif 30 < left_motor_speed - right_motor_speed <= 40:
-        right_motor_speed = 83
-        left_motor_speed = 89
+        right_motor_speed = 80
+        left_motor_speed = 100
     elif 30 < right_motor_speed - left_motor_speed <= 40:
-        right_motor_speed = 89
-        left_motor_speed = 83
-
+        right_motor_speed = 88
+        left_motor_speed = 83"""
 
     return left_motor_speed, right_motor_speed
 
@@ -117,16 +114,16 @@ def preprocess(img):
     """Preprocess image to get a birdview image of lane lines"""
 
     img = grayscale(img)
-    img = gaussian_blur(img, 3)
+    img = gaussian_blur(img, 5)
     img = canny(img, 100, 200)
-    #cv2.imshow("Canny", img)
+    # cv2.imshow("Canny", img)
     cv2.waitKey(1)
     img = birdview_transform(img)
 
     return img
 
 
-def find_lane_lines(image, right_points_before, left_points_before, right_points_up_before, left_points_up_before, draw=False):
+def find_lane_lines(image, right_points_before, right_points_up_before, draw=False):
     """Find lane lines from color image"""
 
     image = preprocess(image)
@@ -137,7 +134,7 @@ def find_lane_lines(image, right_points_before, left_points_before, right_points
         viz_img = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
 
     # Interested line to determine lane center
-    interested_line_y = int(im_height * 0.5)
+    interested_line_y = int(im_height * 0.4)
     interested_line_y_up = int(im_height * 0.3)
     if draw:
         cv2.line(viz_img, (0, interested_line_y),
@@ -153,14 +150,13 @@ def find_lane_lines(image, right_points_before, left_points_before, right_points
     left_point_up = -1
     right_point_up = -1
     lane_width = 280
+    check_turn = False
 
     center = im_width // 2
 
     for x in range(center, 0, -1):
         if interested_line[x] > 0:
             left_point = x
-            left_points_before.append(left_point)
-            left_points_before.pop(0)
             break
 
     for x in range(center + 1, im_width):
@@ -174,8 +170,6 @@ def find_lane_lines(image, right_points_before, left_points_before, right_points
     for x in range(center, 0, -1):
         if interested_line_up[x] > 0:
             left_point_up = x
-            left_points_up_before.append(left_point_up)
-            left_points_up_before.pop(0)
             break
 
     for x in range(center + 1, im_width):
@@ -186,34 +180,25 @@ def find_lane_lines(image, right_points_before, left_points_before, right_points
             right_points_up_before.pop(0)
             break
 
-
-    if (right_point - right_point_up) > 22:
+    if (right_point - right_point_up > 20) and (left_point_up - left_point <= 20):
         temp_right = right_point
-        right_point -= (temp_right - right_point_up)
+        right_point = right_point_up - 35
         left_point = right_point - lane_width
+        check_turn = True
 
-    if (left_point_up - left_point) > 22:
+    if (left_point_up - left_point) > 20 and (right_point - right_point_up) <= 20:
         temp_left = left_point
-        left_point += (left_point_up - temp_left)
-        '''right_point = left_point + lane_width'''
+        left_point = left_point_up + 30
+        right_point = left_point + lane_width
+        check_turn = True
 
-    if abs(right_point - right_points_before[-1]) > 150:
-        right_point = sum(right_points_before)//3
+    if abs(right_point - right_points_before[-1]) > 150 and check_turn == False:
+        right_point = sum(right_points_before) // 3
         right_points_before.append(right_point)
         right_points_before.pop(0)
 
-    if abs(left_point - left_points_before[-1]) > 150:
-        left_point = sum(left_points_before)//3
-        left_points_before.append(left_point)
-        left_points_before.pop(0)
-
-    if abs(left_point_up - left_points_up_before[-1]) > 150:
-        left_point_up = sum(left_points_up_before)//3
-        left_points_up_before.append(left_point_up)
-        left_points_up_before.pop(0)
-
-    if abs(right_point_up - right_points_up_before[-1]) > 150:
-        right_point_up = sum(right_points_up_before)//3
+    if abs(right_point_up - right_points_up_before[-1]) > 150 and check_turn == False:
+        right_point_up = sum(right_points_up_before) // 3
         right_points_up_before.append(right_point_up)
         right_points_up_before.pop(0)
 
@@ -238,23 +223,18 @@ def find_lane_lines(image, right_points_before, left_points_before, right_points
         left_point_up = right_point_up - lane_width
         right_points_up_before.append(right_point_up)'''
 
-
-
-
-    if abs(left_point - right_point) < 30:
+    if abs(left_point - right_point) < 50 and check_turn == False:
         right_point = sum(right_points_before) // 3
 
         left_point = right_point - lane_width
         right_points_before.append(right_point)
         right_points_before.pop(0)
 
-    if abs(left_point_up - right_point_up) < 30:
+    if abs(left_point_up - right_point_up) < 50 and check_turn == False:
         right_point_up = sum(right_points_up_before) // 3
         left_point_up = right_point_up - lane_width
         right_points_up_before.append(right_point_up)
         right_points_up_before.pop(0)
-
-
 
     if draw:
         if left_point != -1:
@@ -273,6 +253,6 @@ def find_lane_lines(image, right_points_before, left_points_before, right_points
         viz_img = cv2.circle(viz_img, (center, interested_line_y), 7, (0, 255, 255), -1)
 
     if draw:
-        return left_point, right_point, center, right_points_before, left_points_before, right_points_up_before, left_points_up_before, right_point_up, left_point_up, viz_img
+        return left_point, right_point, center, right_points_before, right_points_up_before, right_point_up, left_point_up, viz_img
     else:
-        return left_point, right_point, center, right_points_before, left_points_before, right_points_up_before, left_points_up_before, right_point_up, left_point_up
+        return left_point, right_point, center, right_points_before, right_points_up_before, right_point_up, left_point_up

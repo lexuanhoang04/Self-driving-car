@@ -5,7 +5,7 @@ import numpy as np
 import time
 import socket
 
-from controller6 import calculate_control_signal, send_control, set_control_ip, find_lane_lines
+from controller8 import calculate_control_signal, send_control, set_control_ip, find_lane_lines
 
 CONTROL_IP = "192.168.4.1"
 CONTROL_PORT = 9999
@@ -24,8 +24,6 @@ def set_control_ip():
 
 
 _thread.start_new_thread(set_control_ip, ())
-left_points_before_1 = [0, 0, 0]
-left_points_up_before_1 = [0, 0, 0]
 right_points_before_1 = [0, 0, 0]
 right_points_up_before_1 = [0, 0, 0]
 
@@ -48,12 +46,10 @@ while True:
         #        exit(0)
             continue
 
-        left_point, right_point, im_center, right_points_before_2, left_points_before_2, right_points_up_before_2, left_points_up_before_2, right_point_up, left_point_up, draw = find_lane_lines(
-            image, right_points_before_1, left_points_before_1, right_points_up_before_1, left_points_up_before_1, draw=True)
+        left_point, right_point, im_center, right_points_before_2, right_points_up_before_2, right_point_up, left_point_up, draw = find_lane_lines(
+            image, right_points_before_1, right_points_up_before_1, draw=True)
         right_points_before_1 = right_points_before_2
-        left_points_before_1 = left_points_before_2
         right_points_up_before_1 = right_points_up_before_2
-        left_points_up_before_1 = left_points_up_before_2
         cv2.imshow("Lane lines", draw)
         #cv2.waitKey(1)
 
